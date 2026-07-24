@@ -1,0 +1,11 @@
+{
+  "highseas.config.title": "HighSeas - Settings",
+
+  "force_group.highseas.archimedes": "Archimedes Force",
+  "force_group.highseas.archimedes.description": "Buoyancy force from displaced water.",
+  "force_group.highseas.wind": "Wind Force",
+  "force_group.highseas.wind.description": "Wind force on sails and exposed surfaces.",
+  "force_group.highseas.flood_water": "Water Flooding",
+  "force_group.highseas.flood_water.description": "Weight of water flooding the interior.",
+  "block.highseas.gaff_sail": "Gaff Sail"
+}

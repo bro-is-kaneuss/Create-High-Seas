@@ -1,0 +1,60 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# NetBeans
+nbproject/
+
+# Logs
+*.log
+
+# Java
+hs_err_pid*
+replay_pid*
+
+# Local configuration
+local.properties
+
+# Environment
+.env
+.env.*
+
+# Keystores
+*.jks
+*.keystore
+*.p12
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+
+# Generated
+bin/
+
+# Gradle wrapper cache
+.gradle-cache/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
