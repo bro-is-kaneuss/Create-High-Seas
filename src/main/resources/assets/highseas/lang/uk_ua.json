@@ -3,9 +3,6 @@
 
   "force_group.highseas.archimedes": "Сила Архімеда",
   "force_group.highseas.archimedes.description": "Сила плавучості від витісненої води.",
-  "force_group.highseas.wind": "Сила вітру",
-  "force_group.highseas.wind.description": "Сила вітру на вітрила й відкриті поверхні.",
   "force_group.highseas.flood_water": "Затоплення водою",
-  "force_group.highseas.flood_water.description": "Вага води, що затоплює інтер'єр.",
-  "block.highseas.gaff_sail": "Гафельне вітрило"
+  "force_group.highseas.flood_water.description": "Вага води, що затоплює інтер'єр."
 }

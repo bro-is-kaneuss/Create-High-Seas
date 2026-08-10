@@ -13,6 +13,7 @@ public final class HSFloodState {
     private int breachCount;
     private long lastScanTime = -999999L;
     private final Vector3d localCenter = new Vector3d();
+    private byte[] floodedCells;
 
     public double fill() {
         return fill;
@@ -48,6 +49,14 @@ public final class HSFloodState {
 
     public Vector3d localCenter() {
         return new Vector3d(localCenter);
+    }
+
+    public byte[] floodedCells() {
+        return floodedCells;
+    }
+
+    void setFloodedCells(byte[] cells) {
+        this.floodedCells = cells;
     }
 
     void setScan(

@@ -62,6 +62,8 @@ public final class HSNetwork {
 
         float fill = (float) clamp(state.fill(), 0.0, 1.0);
 
+        byte[] bitmap = state.floodedCells();
+
         HSFloodSyncPacket packet = new HSFloodSyncPacket(
                 id,
                 fill,
@@ -70,7 +72,8 @@ public final class HSNetwork {
                 bounds.minZ(),
                 bounds.maxX(),
                 bounds.maxY(),
-                bounds.maxZ()
+                bounds.maxZ(),
+                bitmap
         );
 
         for (ServerPlayer player : level.players()) {

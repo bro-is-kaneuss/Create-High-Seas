@@ -1,37 +1,40 @@
 package com.BreadRes.highseas.physics;
 
-import dev.eriksonn.aeronautics.index.AeroTags;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
-import dev.ryanhcode.sable.physics.chunk.VoxelNeighborhoodState;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.sublevel.water_occlusion.WaterOcclusionContainer;
 import dev.ryanhcode.sable.sublevel.water_occlusion.WaterOcclusionRegion;
 import dev.ryanhcode.sable.util.BoundedBitVolume3i;
-import dev.ryanhcode.sable.util.LevelAccelerator;
-import net.minecraft.core.BlockPos;
-import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.WeakHashMap;
+import java.util.*;
 
 public final class HSWaterOcclusionBridge {
     private static final int UPDATE_INTERVAL_TICKS = 20;
     private static final int MAX_EXPANDED_SCAN_VOLUME = 2000000;
 
-    private static final java.util.Map<SubLevel, RegionEntry> REGIONS =
-            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+    private static final Map<SubLevel, RegionEntry> REGIONS =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    private static final Map<UUID, HSShipGeometry> GEOMETRY_CACHE =
+            new HashMap<>();
 
     private HSWaterOcclusionBridge() {
     }
 
+    public static void setGeometry(SubLevel subLevel, HSShipGeometry geometry) {
+        if (geometry != null && subLevel != null) {
+            UUID id = subLevel.getUniqueId();
+            if (id != null) {
+                GEOMETRY_CACHE.put(id, geometry);
+            }
+        }
+    }
+
     public static void invalidateAll() {
         REGIONS.clear();
+        GEOMETRY_CACHE.clear();
     }
 
     public static void update(Level level) {
@@ -101,7 +104,7 @@ public final class HSWaterOcclusionBridge {
             REGIONS.remove(subLevel);
         }
 
-        ScanResult result = scan(level, bounds);
+        ScanResult result = scan(bounds, subLevel);
 
         if (result == null || result.occupiedCells() <= 0) {
             return;
@@ -121,7 +124,7 @@ public final class HSWaterOcclusionBridge {
         ));
     }
 
-    private static ScanResult scan(Level level, BoundingBox3ic bounds) {
+    private static ScanResult scan(BoundingBox3ic bounds, SubLevel subLevel) {
         int minX = bounds.minX();
         int minY = bounds.minY();
         int minZ = bounds.minZ();
@@ -135,17 +138,22 @@ public final class HSWaterOcclusionBridge {
             return null;
         }
 
-        LevelAccelerator accelerator = new LevelAccelerator(level);
+        UUID id = subLevel != null ? subLevel.getUniqueId() : null;
+        HSShipGeometry geo = id != null ? GEOMETRY_CACHE.get(id) : null;
+
+        if (geo == null) {
+            return null;
+        }
+
         BoundedBitVolume3i result = new BoundedBitVolume3i(minX, minY, minZ, maxX, maxY, maxZ);
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         int occupied = 0;
 
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
                 for (int z = minZ; z <= maxZ; z++) {
-                    cursor.set(x, y, z);
+                    HSCell cell = geo.get(x, y, z);
 
-                    if (!isOcclusionPassable(accelerator, level, cursor)) {
+                    if (cell == null || cell.outside() || cell.solid()) {
                         continue;
                     }
 
@@ -160,45 +168,6 @@ public final class HSWaterOcclusionBridge {
         }
 
         return new ScanResult(result, occupied);
-    }
-
-
-
-    private static boolean isOcclusionPassable(LevelAccelerator accelerator, Level level, BlockPos pos) {
-        BlockState state = accelerator.getBlockState(pos);
-
-        if (state.isAir()) {
-            return true;
-        }
-
-        if (state.getFluidState().is(FluidTags.WATER)) {
-            return true;
-        }
-
-        if (state.is(AeroTags.BlockTags.AIRTIGHT)) {
-            return false;
-        }
-
-        return !VoxelNeighborhoodState.isSolid(accelerator, pos, state);
-    }
-
-    private static boolean isExpandedBoundary(
-            int x,
-            int y,
-            int z,
-            int minX,
-            int minY,
-            int minZ,
-            int maxX,
-            int maxY,
-            int maxZ
-    ) {
-        return x == minX
-                || x == maxX
-                || y == minY
-                || y == maxY
-                || z == minZ
-                || z == maxZ;
     }
 
     private static boolean isEmpty(BoundingBox3ic bounds) {
@@ -286,13 +255,6 @@ public final class HSWaterOcclusionBridge {
         result ^= value;
         result *= 1099511628211L;
         return result;
-    }
-
-    private static long pack(int x, int y, int z) {
-        long lx = ((long) x & 0x3FFFFFFL);
-        long ly = ((long) y & 0xFFFL);
-        long lz = ((long) z & 0x3FFFFFFL);
-        return lx | (lz << 26) | (ly << 52);
     }
 
     private record RegionEntry(

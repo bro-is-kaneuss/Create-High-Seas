@@ -14,23 +14,35 @@ import net.minecraft.world.level.material.FluidState;
 import org.joml.Vector3d;
 
 import java.util.*;
+import java.util.Map;
+import java.util.UUID;
 
 public final class HSFloodingSystem {
     public static final double WATER_DENSITY = 1.0;
     public static final double FLOOD_RATE = 2.8;
     public static final double OVERTOPPING_RATE = 0.25;
-    private static final double SABLE_BUOYANCY_COMPENSATION = 0.0;
 
     private static final double GRAVITY = 9.81;
     private static final double MAX_FLOOD_IMPULSE = 12000.0;
     private static final double BREACH_DEPTH_MARGIN = 0.30;
-    private static final double FLOOD_FILL_WATER_MARGIN = 0.05;
 
     private static final int SCAN_INTERVAL_TICKS = 20;
     private static final int MAX_SCAN_VOLUME = 2000000;
+    private static final int MAX_CACHED_SHIPS = 100;
 
-    private static final WeakHashMap<ServerSubLevel, HSFloodState> STATES = new WeakHashMap<>();
-    private static final WeakHashMap<ServerSubLevel, HSShipGeometry> GEOMETRIES = new WeakHashMap<>();
+    private static final LinkedHashMap<UUID, HSFloodState> STATES = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<UUID, HSFloodState> eldest) {
+            return size() > MAX_CACHED_SHIPS;
+        }
+    };
+
+    private static final LinkedHashMap<UUID, HSShipGeometry> GEOMETRIES = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<UUID, HSShipGeometry> eldest) {
+            return size() > MAX_CACHED_SHIPS;
+        }
+    };
 
     private HSFloodingSystem() {
     }
@@ -41,11 +53,12 @@ public final class HSFloodingSystem {
             double timeStep,
             BoundingBox3ic localBounds
     ) {
-        HSFloodState state = STATES.computeIfAbsent(subLevel, ignored -> new HSFloodState());
+        HSFloodState state = STATES.computeIfAbsent(subLevel.getUniqueId(), ignored -> new HSFloodState());
         long gameTime = level.getGameTime();
 
         if (gameTime - state.lastScanTime() >= SCAN_INTERVAL_TICKS) {
             scan(level, subLevel, localBounds, state);
+            HSWaterOcclusionBridge.setGeometry(subLevel, GEOMETRIES.get(subLevel.getUniqueId()));
         }
 
         state.tick(timeStep);
@@ -71,9 +84,8 @@ public final class HSFloodingSystem {
         safeNormalize(localDown, 0.0, -1.0, 0.0);
 
         double floodWeightImpulse = mass * GRAVITY * timeStep;
-        double compensationImpulse = mass * GRAVITY * SABLE_BUOYANCY_COMPENSATION * timeStep;
-
-        Vector3d impulse = localDown.mul(floodWeightImpulse + compensationImpulse);
+        
+        Vector3d impulse = localDown.mul(floodWeightImpulse);
         clampLength(impulse, MAX_FLOOD_IMPULSE);
 
         if (impulse.lengthSquared() <= 0.0001) {
@@ -85,7 +97,11 @@ public final class HSFloodingSystem {
     }
 
     public static HSFloodState get(ServerSubLevel subLevel) {
-        return STATES.get(subLevel);
+        return STATES.get(subLevel.getUniqueId());
+    }
+
+    public static HSShipGeometry getGeometry(ServerSubLevel subLevel) {
+        return GEOMETRIES.get(subLevel.getUniqueId());
     }
 
     private static HSShipGeometry geometry(
@@ -100,7 +116,7 @@ public final class HSFloodingSystem {
         int expandedMaxY = bounds.maxY() + 1;
         int expandedMaxZ = bounds.maxZ() + 1;
 
-        HSShipGeometry geometry = GEOMETRIES.get(subLevel);
+        HSShipGeometry geometry = GEOMETRIES.get(subLevel.getUniqueId());
 
         if (geometry == null
             || geometry.minX() != expandedMinX
@@ -112,7 +128,7 @@ public final class HSFloodingSystem {
         {
             geometry = new HSShipGeometry(expandedMinX, expandedMinY, expandedMinZ,
                                           expandedMaxX, expandedMaxY, expandedMaxZ);
-            GEOMETRIES.put(subLevel, geometry);
+            GEOMETRIES.put(subLevel.getUniqueId(), geometry);
         }
 
         return geometry;
@@ -195,19 +211,7 @@ public final class HSFloodingSystem {
 
         next.setOutside(true);
 
-        if (isAdjacentToSolid(geometry, x, y, z))
-            return;
-
         queue.add(next);
-    }
-
-    private static boolean isAdjacentToSolid(HSShipGeometry geometry, int x, int y, int z) {
-        return geometry.get(x + 1, y, z) != null && geometry.get(x + 1, y, z).solid()
-            || geometry.get(x - 1, y, z) != null && geometry.get(x - 1, y, z).solid()
-            || geometry.get(x, y + 1, z) != null && geometry.get(x, y + 1, z).solid()
-            || geometry.get(x, y - 1, z) != null && geometry.get(x, y - 1, z).solid()
-            || geometry.get(x, y, z + 1) != null && geometry.get(x, y, z + 1).solid()
-            || geometry.get(x, y, z - 1) != null && geometry.get(x, y, z - 1).solid();
     }
 
     private static void markOutsideCells(
@@ -431,6 +435,10 @@ public final class HSFloodingSystem {
         if (breachCount <= 0 || queue.isEmpty()) {
             double overtoppingPressure = computeOvertoppingPressure(level, subLevel, bounds);
 
+            state.setFloodedCells(
+                    buildFloodBitmap(geometry, minX, minY, minZ, maxX, maxY, maxZ)
+            );
+
             state.setScan(
                     level.getGameTime(),
                     0.0,
@@ -463,16 +471,21 @@ public final class HSFloodingSystem {
             floodable++;
             center.add(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
 
-            tryVisitCompartment(geometry, queue, pos.getX() + 1, pos.getY(), pos.getZ(), compartment);
-            tryVisitCompartment(geometry, queue, pos.getX() - 1, pos.getY(), pos.getZ(), compartment);
-            tryVisitCompartment(geometry, queue, pos.getX(), pos.getY() + 1, pos.getZ(), compartment);
-            tryVisitCompartment(geometry, queue, pos.getX(), pos.getY() - 1, pos.getZ(), compartment);
-            tryVisitCompartment(geometry, queue, pos.getX(), pos.getY(), pos.getZ() + 1, compartment);
-            tryVisitCompartment(geometry, queue, pos.getX(), pos.getY(), pos.getZ() - 1, compartment);
+            tryVisitCompartment(level, subLevel, geometry, queue, pos.getX() + 1, pos.getY(), pos.getZ(), compartment, maxY);
+            tryVisitCompartment(level, subLevel, geometry, queue, pos.getX() - 1, pos.getY(), pos.getZ(), compartment, maxY);
+            tryVisitCompartment(level, subLevel, geometry, queue, pos.getX(), pos.getY() + 1, pos.getZ(), compartment, maxY);
+            tryVisitCompartment(level, subLevel, geometry, queue, pos.getX(), pos.getY() - 1, pos.getZ(), compartment, maxY);
+            tryVisitCompartment(level, subLevel, geometry, queue, pos.getX(), pos.getY(), pos.getZ() + 1, compartment, maxY);
+            tryVisitCompartment(level, subLevel, geometry, queue, pos.getX(), pos.getY(), pos.getZ() - 1, compartment, maxY);
         }
 
         if (floodable < 10) {
             double overtoppingPressure = computeOvertoppingPressure(level, subLevel, bounds);
+
+            state.setFloodedCells(
+                    buildFloodBitmap(geometry, minX, minY, minZ, maxX, maxY, maxZ)
+            );
+
             state.setScan(level.getGameTime(), 0, 0, 0, overtoppingPressure, centerOf(bounds));
             return;
         }
@@ -481,6 +494,10 @@ public final class HSFloodingSystem {
 
         double pressure = pressureSum / Math.max(1, breachCount);
         double overtoppingPressure = computeOvertoppingPressure(level, subLevel, bounds);
+
+        state.setFloodedCells(
+                buildFloodBitmap(geometry, minX, minY, minZ, maxX, maxY, maxZ)
+        );
 
         state.setScan(
                 level.getGameTime(),
@@ -492,13 +509,42 @@ public final class HSFloodingSystem {
         );
     }
 
+    private static byte[] buildFloodBitmap(
+            HSShipGeometry geometry,
+            int minX, int minY, int minZ,
+            int maxX, int maxY, int maxZ
+    ) {
+        int sizeX = maxX - minX + 1;
+        int sizeY = maxY - minY + 1;
+        int sizeZ = maxZ - minZ + 1;
+        int totalCells = sizeX * sizeY * sizeZ;
+        byte[] bitmap = new byte[(totalCells + 7) / 8];
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    HSCell cell = geometry.get(x, y, z);
+                    if (cell != null && cell.flooded()) {
+                        int index = ((x - minX) * sizeY * sizeZ) + ((y - minY) * sizeZ) + (z - minZ);
+                        bitmap[index / 8] |= (byte) (1 << (index % 8));
+                    }
+                }
+            }
+        }
+
+        return bitmap;
+    }
+
     private static void tryVisitCompartment(
+        ServerLevel level,
+        ServerSubLevel subLevel,
         HSShipGeometry geometry,
         ArrayDeque<BlockPos> queue,
         int x,
         int y,
         int z,
-        int compartment
+        int compartment,
+        int maxY
     ) {
 
         HSCell cell = geometry.get(x, y, z);
@@ -517,6 +563,14 @@ public final class HSFloodingSystem {
 
         if (cell.compartment() != compartment)
             return;
+
+        Vector3d world = localCellCenterToWorld(subLevel, x, y, z);
+        double waterY = waterYAt(level, world.x, world.z);
+
+        double margin = (y == maxY) ? 1.5 : BREACH_DEPTH_MARGIN;
+        if (world.y >= waterY + margin) {
+            return;
+        }
 
         cell.setFlooded(true);
 

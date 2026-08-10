@@ -10,7 +10,6 @@ import net.minecraft.resources.ResourceLocation;
 public final class HSForceGroups {
     private static boolean registered = false;
     private static ForceGroup archimedes;
-    private static ForceGroup wind;
     private static ForceGroup floodWater;
 
     private HSForceGroups() {
@@ -24,7 +23,6 @@ public final class HSForceGroups {
         registered = true;
 
         ResourceLocation archimedesId = ResourceLocation.fromNamespaceAndPath(HighSeas.MOD_ID, "archimedes");
-        ResourceLocation windId = ResourceLocation.fromNamespaceAndPath(HighSeas.MOD_ID, "wind");
         ResourceLocation floodWaterId = ResourceLocation.fromNamespaceAndPath(HighSeas.MOD_ID, "flood_water");
 
         archimedes = ForceGroups.REGISTRY.getOptional(archimedesId).orElseGet(() -> Registry.register(
@@ -34,17 +32,6 @@ public final class HSForceGroups {
                         Component.translatable("force_group.highseas.archimedes"),
                         Component.translatable("force_group.highseas.archimedes.description"),
                         0x2F8FC9,
-                        true
-                )
-        ));
-
-        wind = ForceGroups.REGISTRY.getOptional(windId).orElseGet(() -> Registry.register(
-                ForceGroups.REGISTRY,
-                windId,
-                new ForceGroup(
-                        Component.translatable("force_group.highseas.wind"),
-                        Component.translatable("force_group.highseas.wind.description"),
-                        0x9BCBFF,
                         true
                 )
         ));
@@ -67,14 +54,6 @@ public final class HSForceGroups {
         }
 
         return archimedes;
-    }
-
-    public static ForceGroup wind() {
-        if (!registered) {
-            register();
-        }
-
-        return wind;
     }
 
     public static ForceGroup floodWater() {
