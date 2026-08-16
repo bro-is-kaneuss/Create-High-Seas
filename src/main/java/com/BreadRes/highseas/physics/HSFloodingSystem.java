@@ -23,7 +23,7 @@ public final class HSFloodingSystem {
     public static final double OVERTOPPING_RATE = 0.25;
 
     private static final double GRAVITY = 9.81;
-    private static final double MAX_FLOOD_IMPULSE = 12000.0;
+    private static final double MAX_FLOOD_IMPULSE = 1.0E100;
     private static final double BREACH_DEPTH_MARGIN = 0.30;
 
     private static final int SCAN_INTERVAL_TICKS = 20;

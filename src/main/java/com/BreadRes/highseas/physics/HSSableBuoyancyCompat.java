@@ -26,7 +26,7 @@ public final class HSSableBuoyancyCompat {
     private static final double DAMPING_MULTIPLIER = 1.05;
     private static final double FLOW_DRAG_MULTIPLIER = 0.14;
 
-    private static final double MAX_IMPULSE_PER_POINT = 3000.0;
+    private static final double MAX_IMPULSE_PER_POINT = 1.0E100;
     private static final double MIN_FORCE_SQUARED = 0.0001;
 
     private HSSableBuoyancyCompat() {
